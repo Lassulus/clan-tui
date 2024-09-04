@@ -1,12 +1,14 @@
+import argparse
+import asyncio
+import json
+import os
+import re
+import subprocess
+
 from textual import work
 from textual.app import App, ComposeResult
-from textual.widgets import Collapsible, Footer, Markdown, ListView, ListItem, Log
 from textual.containers import Container
-from textual.color import Color
-import asyncio
-import subprocess
-import json
-import re
+from textual.widgets import Collapsible, Footer, ListItem, ListView, Log
 
 
 async def ping(host: str) -> float:
@@ -16,7 +18,7 @@ async def ping(host: str) -> float:
         stderr=subprocess.PIPE,
     )
     stdout, _ = await proc.communicate()
-    match = re.search(r'=.*/(?P<avg>.*)/.*', stdout.decode())
+    match = re.search(r"=.*/(?P<avg>.*)/.*", stdout.decode())
     if match:
         return float(match.group("avg"))
     else:
@@ -24,19 +26,25 @@ async def ping(host: str) -> float:
 
 
 def get_machines() -> list[str]:
-    flake_show = json.loads(subprocess.run(["nix", "flake", "show", "--json"], capture_output=True, text=True).stdout)
+    flake_show = json.loads(
+        subprocess.run(
+            ["nix", "flake", "show", "--json"], capture_output=True, text=True
+        ).stdout
+    )
     machines = list(flake_show["nixosConfigurations"].keys())
     return machines
 
 
-class Machine():
+class Machine:
     def __init__(self, name):
         self.name = name
         self.ping = "pinging...."
         self.log = Log()
         self.deploying = False
         self.log.styles.height = 10
-        self.collapsible = Collapsible(self.log, collapsed=True, title=f'{name} {self.ping}')
+        self.collapsible = Collapsible(
+            self.log, collapsed=True, title=f"{name} {self.ping}"
+        )
         self.list_item = ListItem(self.collapsible)
         self.list_item.machine = self
 
@@ -46,14 +54,19 @@ class Machine():
     async def update_ping(self):
         self.ping = await ping(self.name)
         if self.ping == -1:
-            self.collapsible.title = f'{self.name} --OFFLINE--'
+            self.collapsible.title = f"{self.name} --OFFLINE--"
         else:
-            self.collapsible.title = f'{self.name} {self.ping}ms'
+            self.collapsible.title = f"{self.name} {self.ping}ms"
 
-    async def update_machine(self):
+    async def update_machine(self, command: str):
         self.deploying = True
+        env = os.environ.copy()
+        env["target"] = self.name
         proc = await asyncio.create_subprocess_exec(
-            "nix", "run", "git+https://git.clan.lol/clan/clan-core", "--", "machines", "update", self.name,
+            "/bin/sh",
+            "-c",
+            command,
+            env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -64,6 +77,7 @@ class Machine():
                 if not line:
                     break
                 self.log.write(line.decode())
+
         await asyncio.gather(
             read_stream(proc.stdout),
             read_stream(proc.stderr),
@@ -115,8 +129,7 @@ class FlakeDeployApp(App[None]):
         machine = self.machines_view.highlighted_child.machine
         if not machine.deploying:
             machine.log.write("Updating...\n")
-            asyncio.create_task(machine.update_machine())
-
+            asyncio.create_task(machine.update_machine(self.cli_args.deploy_command))
 
     def on_list_view_selected(self, event: ListView.Selected):
         """Show details of the selected machine."""
@@ -124,6 +137,19 @@ class FlakeDeployApp(App[None]):
         machine_item.children[0].collapsed = not machine_item.children[0].collapsed
 
 
-if __name__ == "__main__":
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--deploy-command",
+        type=str,
+        default="nix run git+https://git.clan.lol/clan/clan-core -- machines update $target",
+        help="Command to deploy a machine, the target machine is passed as an environment variable 'target'",
+    )
+    args = parser.parse_args()
     app = FlakeDeployApp()
+    app.cli_args = args
     app.run()
+
+
+if __name__ == "__main__":
+    main()

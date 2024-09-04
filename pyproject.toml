@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clan-tui"
+description = "distributed data daemon"
+version = "1.0.0"
+authors = [{ name = "lassulus", email = "art@lassul.us" }]
+license = { text = "MIT" }
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Topic :: Utilities",
+  "Intended Audience :: Developers",
+]
+dependencies = [
+  "textual",
+]
+
+[project.urls]
+Homepage = "https://git.clan.lol/clan/clan-tui"
+
+[project.scripts]
+clan-tui = "clan_tui.main:main"
+
+[tool.setuptools]
+packages = ["clan_tui"]
+
+[tool.pytest.ini_options]
+testpaths = "tests"
+faulthandler_timeout = 60
+log_level = "DEBUG"
+log_format = "%(levelname)s: %(message)s\n       %(pathname)s:%(lineno)d::%(funcName)s"
+# addopts = "--cov . --cov-report term --cov-report html:.reports/html --no-cov-on-fail --durations 5 --color=yes --new-first" # Add --pdb for debugging
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+select = ["E", "F", "I", "U"]
+ignore = [ "E501" ]
+
+[tool.mypy]
+python_version = "3.11"
+pretty = true
+warn_redundant_casts = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = "setuptools.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pytest.*"
+ignore_missing_imports = true
